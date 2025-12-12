@@ -1,0 +1,19 @@
+{
+  "name": "thai-law-assistant-app",
+  "version": "1.0.0",
+  "description": "A web chat application utilizing Netlify Functions to proxy requests to the Gemini API for Thai legal consultation.",
+  "main": "netlify/functions/gemini-chat-proxy.js",
+  "scripts": {
+    "start": "echo 'Run this app in a web browser. Netlify Functions are deployed automatically.'",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "gemini",
+    "ai",
+    "netlify-functions",
+    "chat"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}
