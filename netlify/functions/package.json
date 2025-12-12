@@ -1,0 +1,12 @@
+{
+  "name": "thai-law-assistant-chat",
+  "version": "1.0.0",
+  "description": "A multilingual chat assistant specialized in Thai law using the Gemini API and a Netlify function.",
+  "main": "netlify/functions/gemini-chat-proxy.js",
+  "scripts": {
+    "start": "echo 'This project is designed to be deployed via Netlify. Start script is placeholder.'"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
