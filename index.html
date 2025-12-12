@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ผู้ช่วยกฎหมายไทย - Thai Law Assistant</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+        .chat-bubble-user {
+            background-color: #3b82f6; /* Blue-500 */
+            color: white;
+            border-radius: 1.5rem 1.5rem 0.5rem 1.5rem;
+        }
+        .chat-bubble-ai {
+            background-color: #ffffff;
+            color: #1f2937; /* Gray-800 */
+            border-radius: 1.5rem 1.5rem 1.5rem 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        .scrollable-chat {
+            max-height: calc(100vh - 160px); /* Adjust based on header/footer height */
+        }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        .dot-pulse > div {
+            animation: bounce 1.0s infinite ease-in-out both;
+        }
+        .dot-pulse > div:nth-child(1) { animation-delay: -0.32s; }
+        .dot-pulse > div:nth-child(2) { animation-delay: -0.16s; }
+    </style>
+</head>
+<body class="flex flex-col h-screen antialiased">
+
+    <!-- Header -->
+    <header class="bg-white border-b shadow-sm sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto p-4 flex justify-between items-center">
+            <h1 id="header-title" class="text-xl font-bold text-gray-800">ผู้ช่วยกฎหมายไทย</h1>
+            <select id="language-select" class="p-2 border border-gray-300 rounded-lg text-sm bg-gray-50 cursor-pointer">
+                <option value="Thai">ภาษาไทย</option>
+                <option value="English">English</option>
+                <option value="Simplified Chinese">简体中文</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Chat Container -->
+    <main class="flex-grow overflow-hidden p-4 max-w-4xl mx-auto w-full">
+        <div id="chat-messages" class="scrollable-chat overflow-y-auto space-y-4">
+            <!-- Chat messages will be appended here -->
+        </div>
+    </main>
+
+    <!-- Input Area -->
+    <div class="bg-white border-t p-4 sticky bottom-0 z-10 shadow-lg">
+        <div class="max-w-4xl mx-auto flex gap-3">
+            <input type="text" id="user-input" placeholder="พิมพ์คำถามของคุณที่นี่..."
+                   class="flex-grow p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
+                   autocomplete="off">
+            <button id="send-button"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-xl transition-colors disabled:bg-gray-400">
+                ส่ง
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Modal/Overlay -->
+    <div id="loading-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl flex flex-col items-center">
+            <div class="dot-pulse flex space-x-2">
+                <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+                <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+                <div class="w-3 h-3 bg-blue-600 rounded-full"></div>
+            </div>
+            <p id="loading-text" class="mt-4 text-gray-700 font-medium">กำลังค้นหากฎหมายไทย...</p>
+        </div>
+    </div>
+
+
+    <script>
+        // Global State
+        let currentLanguage = 'Thai';
+        let chatHistoryArray = []; 
+        // The API endpoint must match the Netlify configuration /functions/ + file name (without .js)
+        const API_ENDPOINT = '/.netlify/functions/gemini-chat-proxy'; 
+
+        // UI Element References
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const languageSelect = document.getElementById('language-select');
+        const headerTitle = document.getElementById('header-title');
+        const loadingModal = document.getElementById('loading-modal');
+        const loadingText = document.getElementById('loading-text');
+
+        // Localization Strings
+        const LANGUAGES = {
+            'Thai': {
+                code: 'Thai',
+                title: 'ผู้ช่วยกฎหมายไทย',
+                placeholder: 'พิมพ์คำถามของคุณที่นี่...',
+                send: 'ส่ง',
+                greeting: 'สวัสดีค่ะ! ดิฉันคือผู้ช่วยกฎหมายไทยผู้เชี่ยวชาญ ดิฉันพร้อมที่จะตอบคำถามเกี่ยวกับกฎหมายไทยให้คุณค่ะ ถามคำถามของคุณได้เลยนะคะ',
+                loading: 'กำลังค้นหากฎหมายไทย...',
+                error_general: 'ขออภัยค่ะ เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง',
+                error_key_missing: 'ข้อผิดพลาด: ไม่พบ API Key กรุณาตั้งค่า GEMINI_API_KEY ใน Netlify Environment Variables',
+            },
+            'English': {
+                code: 'English',
+                title: 'Thai Law Assistant',
+                placeholder: 'Type your question here...',
+                send: 'Send',
+                greeting: 'Hello! I am a knowledgeable assistant specializing in Thai law. I am ready to answer your questions. Please feel free to ask your query.',
+                loading: 'Searching Thai law...',
+                error_general: 'Sorry, an error occurred during the connection. Please try again.',
+                error_key_missing: 'ERROR: API Key is missing. Please set GEMINI_API_KEY in Netlify Environment Variables.',
+            },
+            'Simplified Chinese': {
+                code: 'Simplified Chinese',
+                title: '泰国法律助手',
+                placeholder: '在此输入您的问题...',
+                send: '发送',
+                greeting: '您好！我是一位知识渊博的泰国法律助理。我已准备好回答您的泰国法律问题。请随时提问。',
+                loading: '正在查询泰国法律...',
+                error_general: '对不起，连接时发生错误，请再试一次。',
+                error_key_missing: '错误：API 密钥缺失。请在 Netlify 环境变量中设置 GEMINI_API_KEY。',
+            }
+        };
+
+        // --- UI Functions ---
+
+        /** Updates all user-facing UI elements based on the currentLanguage setting. */
+        function updateUI() {
+            const lang = LANGUAGES[currentLanguage];
+            headerTitle.textContent = lang.title;
+            userInput.placeholder = lang.placeholder;
+            sendButton.textContent = lang.send;
+            loadingText.textContent = lang.loading;
+        }
+
+        /** Creates and appends a new chat bubble to the display. */
+        function addMessage(role, text, sources = []) {
+            const isUser = role === 'user';
+            const bubbleClass = isUser ? 'chat-bubble-user ml-auto' : 'chat-bubble-ai';
+            const alignment = isUser ? 'justify-end' : 'justify-start';
+            const lang = LANGUAGES[currentLanguage];
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${alignment}`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = `max-w-xs sm:max-w-md p-4 rounded-xl shadow-md transition-all duration-300 ${bubbleClass} whitespace-pre-wrap`;
+            contentDiv.innerHTML = formatText(text); // Use innerHTML to render Markdown formatting
+
+            messageDiv.appendChild(contentDiv);
+
+            // Add sources only for AI messages if available
+            if (role === 'ai' && sources.length > 0) {
+                const sourcesDiv = document.createElement('div');
+                sourcesDiv.className = 'text-xs text-gray-500 mt-1 space-y-1 max-w-xs sm:max-w-md';
+                const sourceTitle = lang.code === 'Thai' ? 'อ้างอิง:' : lang.code === 'Simplified Chinese' ? '来源:' : 'Sources:';
+                
+                let sourceHtml = `<p class="font-semibold">${sourceTitle}</p>`;
+                
+                sources.slice(0, 3).forEach((source, index) => { // Limit to 3 sources
+                    sourceHtml += `<p class="truncate"><a href="${source.uri}" target="_blank" class="text-blue-500 hover:text-blue-700 hover:underline">${source.title}</a></p>`;
+                });
+                
+                sourcesDiv.innerHTML = sourceHtml;
+                const sourceContainer = document.createElement('div');
+                sourceContainer.className = `flex ${alignment} pt-1`;
+                sourceContainer.appendChild(sourcesDiv);
+                chatMessages.appendChild(sourceContainer);
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll to bottom
+        }
+
+        /** Simple function to convert basic Markdown (like **bold**) to HTML. */
+        function formatText(text) {
+            // Convert **bold** to <strong>
+            let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Convert *italics* to <em>
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Convert newlines to breaks
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        /** Displays the initial greeting message when the app loads or language changes. */
+        function displayInitialGreeting() {
+            chatMessages.innerHTML = ''; // Clear previous messages
+            const lang = LANGUAGES[currentLanguage];
+            // The greeting is configured to be an AI role to initiate the chat
+            addMessage('ai', lang.greeting); 
+        }
+
+        // --- Chat Logic ---
+
+        /** Sends the user query to the Netlify function. */
+        async function sendQuery() {
+            const query = userInput.value.trim();
+            if (query === '') return;
+
+            // 1. Disable inputs and show loading
+            sendButton.disabled = true;
+            userInput.disabled = true;
+            userInput.value = '';
+            loadingModal.classList.remove('hidden');
+
+            // 2. Add user message to UI and history
+            addMessage('user', query);
+            chatHistoryArray.push({ role: 'user', text: query });
+
+            const lang = LANGUAGES[currentLanguage];
+
+            try {
+                // 3. Call the Netlify Function proxy
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        chatHistory: chatHistoryArray,
+                        language: lang.code // Pass the required response language to the backend
+                    }),
+                });
+
+                // 4. Handle HTTP errors from the Netlify function
+                if (!response.ok) {
+                    let errorBody = await response.json().catch(() => ({}));
+                    let errorMessage = lang.error_general;
+                    
+                    if (errorBody && errorBody.detail === "API_KEY_MISSING") {
+                        errorMessage = lang.error_key_missing;
+                    } 
+                    
+                    // If response is not OK, throw an error to jump to the catch block
+                    throw new Error(JSON.stringify(errorBody));
+                }
+
+                // 5. Process the successful AI response
+                const result = await response.json();
+                const aiResponseText = result.text;
+                const sources = result.sources || [];
+
+                addMessage('ai', aiResponseText, sources);
+                chatHistoryArray.push({ role: 'model', text: aiResponseText });
+
+            } catch (error) {
+                // console.error('Error during fetch:', error);
+                
+                const lang = LANGUAGES[currentLanguage];
+                let errorMessage;
+                let errorDetails = {};
+                try {
+                    // Try to parse error details if it came from the fetch throw
+                    errorDetails = JSON.parse(error.message);
+                } catch(e) {
+                    // Ignore parsing error, use general error
+                }
+                
+                if (errorDetails.detail === "API_KEY_MISSING") {
+                    errorMessage = lang.error_key_missing;
+                } else {
+                    errorMessage = lang.error_general;
+                }
+                
+                addMessage('ai', errorMessage);
+                // Remove the last user message from history so the user can retry
+                chatHistoryArray.pop();
+
+            } finally {
+                // 6. Hide loading and re-enable inputs
+                loadingModal.classList.add('hidden');
+                sendButton.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        // --- Event Listeners and Init ---
+
+        languageSelect.addEventListener('change', (event) => {
+            currentLanguage = event.target.value;
+            updateUI();
+            
+            // Clear history and reset context for the new language conversation
+            chatHistoryArray = []; 
+            displayInitialGreeting(); // Display the newly translated greeting
+        });
+
+        sendButton.addEventListener('click', sendQuery);
+
+        userInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter' && !sendButton.disabled) {
+                sendQuery();
+            }
+        });
+
+        // Initialize UI and display initial greeting on load
+        window.onload = () => {
+            updateUI();
+            displayInitialGreeting();
+            userInput.focus();
+        };
+
+    </script>
+</body>
+</html>
