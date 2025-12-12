@@ -1,0 +1,20 @@
+[build]
+  # The publish directory is the folder Netlify will serve (where index.html is located).
+  publish = "/"
+  # The functions directory is where Netlify will find and deploy your serverless functions.
+  functions = "netlify/functions"
+  # Removing the explicit build command allows Netlify's integrated functions bundler (esbuild) 
+  # to correctly install and package function dependencies (like 'node-fetch') 
+  # found in the 'netlify/functions/package.json' file.
+
+# Global settings for all contexts
+[functions]
+  node_bundler = "esbuild"
+  # Timeout for the chat function (max 26 seconds for standard accounts)
+  timeout = 15
+
+# Environment variables for production context (required for the proxy function)
+# NOTE: The GEMINI_API_KEY should be set securely in the Netlify UI under Site Settings > Environment Variables
+# The function 'gemini-chat-proxy.js' relies on this variable.
+[context.production.environment]
+  # GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE" # Placeholder - Set securely in Netlify UI
